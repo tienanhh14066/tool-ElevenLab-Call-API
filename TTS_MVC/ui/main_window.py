@@ -1,123 +1,108 @@
-import os, threading, requests
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from Core import core_logic
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
+    QFileDialog, QHBoxLayout, QToolButton, QDialog, QLabel, QTextEdit, QDialogButtonBox
+)
+from PyQt5.QtCore import Qt
+from controller.app_controller import AppController
+from core.status import STATUS_WAIT, STATUS_SUCCESS, STATUS_FAILED
 
-API_KEY = 'YOUR_ELEVENLABS_API_KEY'
-VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'  # thay ID nếu muốn giọng khác
-URL = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
+class EditDialog(QDialog):
+    def __init__(self, filename, content, on_save):
+        super().__init__()
+        self.setWindowTitle(f"Sửa nội dung - {filename}")
+        self.resize(400, 300)
+        self.textbox = QTextEdit()
+        self.textbox.setText(content)
 
-HEADERS = {
-    "xi-api-key": API_KEY,
-    "Content-Type": "application/json"
-}
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
 
-loaded_data = []
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel(f"<b>{filename}</b>"))
+        layout.addWidget(self.textbox)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+        self.on_save = on_save
 
-class StatusTableApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Quản lý trạng thái file txt")
+    def accept(self):
+        self.on_save(self.textbox.toPlainText().strip())
+        super().accept()
 
-        self.select_btn = tk.Button(root, text="Chọn thư mục", command=self.select_folder)
-        self.select_btn.pack(pady=5)
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("TTS App - Phase 1.5 (MVC)")
+        self.resize(1000, 650)
+        self.controller = AppController()
 
-        self.run_btn = tk.Button(root, text="🔊 Chạy TTS", command=self.run_tts)
-        self.run_btn.pack(pady=5)
+        layout = QVBoxLayout()
+        self.select_btn = QPushButton("📂 Chọn thư mục")
+        self.select_btn.clicked.connect(self.select_folder)
+        layout.addWidget(self.select_btn)
 
-        self.tree = ttk.Treeview(root, columns=("STT", "Tên txt", "Nội Dung", "Trạng Thái", "Ghi Chú", "Chạy Lại"), show="headings")
-        for col in self.tree["columns"]:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, anchor="center")
+        self.info_label = QLabel("📂 Chưa chọn thư mục")
+        layout.addWidget(self.info_label)
 
-        self.tree.pack(fill=tk.BOTH, expand=True)
-        self.tree.bind('<Double-1>', self.edit_cell)
+        self.table = QTableWidget(0, 6)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setHorizontalHeaderLabels(["STT", "Tên txt", "Nội Dung", "Trạng Thái", "Ghi Chú", "Hành Động"])
+        layout.addWidget(self.table)
 
-        style = ttk.Style()
-        style.configure("Treeview", rowheight=28)
-        style.map("Treeview", background=[('selected', '#ececec')])
+        self.setLayout(layout)
 
     def select_folder(self):
-        folder = filedialog.askdirectory()
+        folder = QFileDialog.getExistingDirectory(self, "Chọn thư mục")
         if folder:
-            global loaded_data
-            loaded_data = core_logic.get_txt_files(folder)
-            self.populate_table()
+            stats = self.controller.load_folder(folder)
+            self.info_label.setText(
+                f"📂 {stats['path']} | 📄 Tổng: {stats['total']} | ✅ Đã gen: {stats['done']} | ❌ Chưa/Lỗi: {stats['pending']}"
+            )
+            self.populate_table(self.controller.loaded_data)
 
-    def populate_table(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        for row in loaded_data:
-            values = [row[col] for col in self.tree["columns"][:-1]]
-            item_id = self.tree.insert("", "end", values=values)
-            self.colorize_row(item_id, row["Trạng Thái"])
-            if row["Trạng Thái"] == "Thất Bại":
-                self.tree.set(item_id, "Chạy Lại", "[Nút]")
+    def populate_table(self, data):
+        self.table.setRowCount(0)
+        for i, row in enumerate(data):
+            self.table.insertRow(i)
+            for j, key in enumerate(["STT", "Tên txt", "Nội Dung", "Trạng Thái", "Ghi Chú"]):
+                item = QTableWidgetItem(str(row[key]))
+                item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                self.table.setItem(i, j, item)
 
-    def colorize_row(self, item_id, status):
-        color_map = {
-            "Chờ": "#fffccc",
-            "Thành Công": "#ccffcc",
-            "Thất Bại": "#ffcccc",
-            "đang xử lý": "#d0e0ff"
-        }
-        self.tree.item(item_id, tags=(status,))
-        self.tree.tag_configure(status, background=color_map.get(status, "white"))
+            action_widget = QWidget()
+            hbox = QHBoxLayout()
+            hbox.setContentsMargins(0, 0, 0, 0)
 
-    def edit_cell(self, event):
-        item_id = self.tree.identify_row(event.y)
-        col = self.tree.identify_column(event.x)
-        col_index = int(col.replace('#', '')) - 1
-        col_name = self.tree["columns"][col_index]
-        if col_name != "Nội Dung":
-            return
-        current_status = self.tree.set(item_id, "Trạng Thái")
-        if current_status not in ["Chờ", "Thất Bại"]:
-            return
-        old_value = self.tree.set(item_id, col_name)
-        entry = tk.Entry(self.root)
-        entry.insert(0, old_value)
-        def save_edit(event):
-            new_value = entry.get()
-            self.tree.set(item_id, col_name, new_value)
-            entry.destroy()
-            index = int(self.tree.set(item_id, "STT")) - 1
-            loaded_data[index]["Nội Dung"] = new_value
-            core_logic.update_txt_file(loaded_data[index]["Path"], new_value)
-            messagebox.showinfo("Lưu thành công", f"Đã lưu thay đổi cho {loaded_data[index]['Tên txt']}.")
-        bbox = self.tree.bbox(item_id, col)
-        entry.place(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
-        entry.focus()
-        entry.bind('<Return>', save_edit)
+            edit_btn = QToolButton()
+            edit_btn.setText("🛠")
+            edit_btn.clicked.connect(lambda _, r=i: self.open_edit_dialog(r))
+            hbox.addWidget(edit_btn)
 
-    def run_tts(self):
-        threading.Thread(target=self.process_all, daemon=True).start()
+            tts_btn = QPushButton("🔊 Gọi TTS")
+            if row["Trạng Thái"] == STATUS_FAILED:
+                tts_btn.clicked.connect(lambda _, r=i: self.call_api(r))
+                hbox.addWidget(tts_btn)
 
-    def process_all(self):
-        for i, row in enumerate(loaded_data):
-            self.tree.set(self.tree.get_children()[i], "Trạng Thái", "đang xử lý")
-            self.colorize_row(self.tree.get_children()[i], "đang xử lý")
-            try:
-                payload = {
-                    "text": row["Nội Dung"],
-                    "model_id": "eleven_monolingual_v1",
-                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}
-                }
-                response = requests.post(URL, headers=HEADERS, json=payload)
-                if response.status_code == 200:
-                    mp3_path = row["Path"].replace(".txt", ".mp3")
-                    with open(mp3_path, "wb") as f:
-                        f.write(response.content)
-                    status, note = "Thành Công", ""
-                else:
-                    status, note = "Thất Bại", response.text
-            except Exception as e:
-                status, note = "Thất Bại", str(e)
-            self.tree.set(self.tree.get_children()[i], "Trạng Thái", status)
-            self.tree.set(self.tree.get_children()[i], "Ghi Chú", note)
-            self.colorize_row(self.tree.get_children()[i], status)
+            action_widget.setLayout(hbox)
+            self.table.setCellWidget(i, 5, action_widget)
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = StatusTableApp(root)
-    root.mainloop()
+    def open_edit_dialog(self, row):
+        file_name = self.table.item(row, 1).text()
+        old_content = self.table.item(row, 2).text()
+
+        def on_save(new_text):
+            self.controller.save_edited(row, new_text)
+            self.table.item(row, 2).setText(new_text)
+
+        dlg = EditDialog(file_name, old_content, on_save)
+        dlg.exec_()
+
+    def call_api(self, row):
+        self.table.item(row, 3).setText("Đang xử lý")
+        self.table.item(row, 4).setText("")
+
+        def callback(index, updated_row):
+            self.table.item(index, 3).setText(updated_row["Trạng Thái"])
+            self.table.item(index, 4).setText(updated_row["Ghi Chú"])
+
+        self.controller.call_api(row, callback)

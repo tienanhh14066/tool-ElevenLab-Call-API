@@ -1,0 +1,4 @@
+STATUS_WAIT = "Chờ"
+STATUS_SUCCESS = "Thành Công"
+STATUS_FAILED = "Thất Bại"
+STATUS_PROCESSING = "Đang xử lý"
