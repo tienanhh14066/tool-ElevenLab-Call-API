@@ -1,6 +1,7 @@
+import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
-    QFileDialog, QHBoxLayout, QToolButton, QDialog, QLabel, QTextEdit, QDialogButtonBox
+    QFileDialog, QHBoxLayout, QToolButton, QDialog, QLabel, QTextEdit, QDialogButtonBox, QApplication
 )
 from PyQt5.QtCore import Qt
 from controller.app_controller import AppController
@@ -39,7 +40,10 @@ class MainWindow(QWidget):
         layout = QVBoxLayout()
         self.select_btn = QPushButton("📂 Chọn thư mục")
         self.select_btn.clicked.connect(self.select_folder)
+        self.start_all_btn = QPushButton("▶️ Bắt đầu")
+        self.start_all_btn.clicked.connect(self.handle_run_all_tts)
         layout.addWidget(self.select_btn)
+        layout.addWidget(self.start_all_btn)
 
         self.info_label = QLabel("📂 Chưa chọn thư mục")
         layout.addWidget(self.info_label)
@@ -116,3 +120,10 @@ class MainWindow(QWidget):
             self.table.item(index, 5).setText(updated_row["Ghi Chú"])
 
         self.controller.call_api(row, callback)
+    
+    def handle_run_all_tts(self):
+        self.controller.run_all_tts(lambda idx: (
+        self.call_api(idx),
+        QApplication.processEvents()
+    ))
+

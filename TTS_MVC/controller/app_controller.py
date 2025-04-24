@@ -57,3 +57,7 @@ class AppController:
             callback(index, row)
 
         call_tts_api(row["Nội Dung"], wrapped)
+    
+    def run_all_tts(self, callback_per_row, delay_sec=0.5):
+        from core.model import run_all_tts
+        run_all_tts(self.loaded_data, callback_per_row, delay_sec)
