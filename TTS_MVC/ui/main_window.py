@@ -33,7 +33,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TTS App - Phase 1.5 (MVC)")
-        self.resize(1000, 650)
+        self.resize(1050, 650)
         self.controller = AppController()
 
         layout = QVBoxLayout()
@@ -44,9 +44,9 @@ class MainWindow(QWidget):
         self.info_label = QLabel("📂 Chưa chọn thư mục")
         layout.addWidget(self.info_label)
 
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 7)
         self.table.verticalHeader().setVisible(False)
-        self.table.setHorizontalHeaderLabels(["STT", "Tên txt", "Nội Dung", "Trạng Thái", "Ghi Chú", "Hành Động"])
+        self.table.setHorizontalHeaderLabels(["STT", "Tên txt", "Nội Dung", "Trạng Thái", "Progress", "Ghi Chú", "Hành Động"])
         layout.addWidget(self.table)
 
         self.setLayout(layout)
@@ -64,10 +64,18 @@ class MainWindow(QWidget):
         self.table.setRowCount(0)
         for i, row in enumerate(data):
             self.table.insertRow(i)
-            for j, key in enumerate(["STT", "Tên txt", "Nội Dung", "Trạng Thái", "Ghi Chú"]):
+            for j, key in enumerate(["STT", "Tên txt", "Nội Dung", "Trạng Thái"]):
                 item = QTableWidgetItem(str(row[key]))
                 item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
                 self.table.setItem(i, j, item)
+
+            progress_item = QTableWidgetItem(row.get("Progress", ""))
+            progress_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            self.table.setItem(i, 4, progress_item)
+
+            ghi_chu_item = QTableWidgetItem(str(row.get("Ghi Chú", "")))
+            ghi_chu_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            self.table.setItem(i, 5, ghi_chu_item)
 
             action_widget = QWidget()
             hbox = QHBoxLayout()
@@ -84,7 +92,7 @@ class MainWindow(QWidget):
                 hbox.addWidget(tts_btn)
 
             action_widget.setLayout(hbox)
-            self.table.setCellWidget(i, 5, action_widget)
+            self.table.setCellWidget(i, 6, action_widget)
 
     def open_edit_dialog(self, row):
         file_name = self.table.item(row, 1).text()
@@ -99,10 +107,12 @@ class MainWindow(QWidget):
 
     def call_api(self, row):
         self.table.item(row, 3).setText("Đang xử lý")
-        self.table.item(row, 4).setText("")
+        self.table.item(row, 4).setText("...")
+        self.table.item(row, 5).setText("")
 
         def callback(index, updated_row):
             self.table.item(index, 3).setText(updated_row["Trạng Thái"])
-            self.table.item(index, 4).setText(updated_row["Ghi Chú"])
+            self.table.item(index, 4).setText(updated_row.get("Progress", ""))
+            self.table.item(index, 5).setText(updated_row["Ghi Chú"])
 
         self.controller.call_api(row, callback)

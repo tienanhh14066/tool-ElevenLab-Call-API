@@ -1,4 +1,4 @@
-import os
+import os, time
 from core.model import get_txt_files, update_txt_file
 from core.api import call_tts_api, TTSResponse
 from core.status import STATUS_SUCCESS, STATUS_WAIT, STATUS_FAILED
@@ -17,9 +17,11 @@ class AppController:
             if os.path.exists(mp3_path):
                 row["Trạng Thái"] = STATUS_SUCCESS
                 row["Ghi Chú"] = ""
+                row["Progress"] = ""
             else:
                 row["Trạng Thái"] = STATUS_WAIT
                 row["Ghi Chú"] = ""
+                row["Progress"] = ""
 
         total = len(self.loaded_data)
         done = sum(1 for r in self.loaded_data if r["Trạng Thái"] == STATUS_SUCCESS)
@@ -37,15 +39,21 @@ class AppController:
 
     def call_api(self, index, callback):
         row = self.loaded_data[index]
+        start = time.time()
+
         def wrapped(result: TTSResponse):
+            elapsed = round(time.time() - start, 2)
             if result.success and result.content:
                 mp3_path = row["Path"].replace(".txt", ".mp3")
                 with open(mp3_path, "wb") as f:
                     f.write(result.content)
                 row["Trạng Thái"] = STATUS_SUCCESS
                 row["Ghi Chú"] = ""
+                row["Progress"] = f"{elapsed}s"
             else:
                 row["Trạng Thái"] = STATUS_FAILED
                 row["Ghi Chú"] = result.error or "Lỗi không xác định"
+                row["Progress"] = f"{elapsed}s"
             callback(index, row)
+
         call_tts_api(row["Nội Dung"], wrapped)
